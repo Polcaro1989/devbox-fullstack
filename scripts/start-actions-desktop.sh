@@ -42,12 +42,14 @@ server {
         return 302 /vnc.html?autoconnect=true&resize=scale&path=websockify;
     }
 
-    location /terminal/ {
-        proxy_pass http://127.0.0.1:7681;
+    location ~ ^/terminal(.*)$ {
         proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_set_header Host \$host;
+        proxy_pass http://127.0.0.1:7681/\$1;
     }
 
     location / {
@@ -93,6 +95,7 @@ ttyd \
   -i 127.0.0.1 \
   -p 7681 \
   -b /terminal \
+  -W \
   bash -l >"$RUNTIME_DIR/ttyd.log" 2>&1 &
 echo $! > "$RUNTIME_DIR/ttyd.pid"
 
