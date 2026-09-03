@@ -110,7 +110,16 @@ for pid_file in "$RUNTIME_DIR"/*.pid; do
   fi
 done
 
-curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/vnc.html >/dev/null
+if ! curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/vnc.html >/dev/null; then
+  echo 'noVNC proxy health check failed' >&2
+  echo 'direct noVNC HTTP status:' >&2
+  curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:6080/vnc.html >&2 || true
+  echo 'websockify log:' >&2
+  tail -n 80 "$RUNTIME_DIR/websockify.log" >&2 || true
+  echo 'nginx error log:' >&2
+  sudo tail -n 80 /var/log/nginx/error.log >&2 || true
+  exit 1
+fi
 
 if ! curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/terminal/ >/dev/null; then
   echo 'terminal proxy health check failed' >&2
