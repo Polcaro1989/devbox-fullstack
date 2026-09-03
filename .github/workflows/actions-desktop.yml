@@ -1,0 +1,57 @@
+name: Actions Desktop
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: actions-desktop-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  desktop:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    env:
+      DESKTOP_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate desktop password
+        shell: bash
+        run: |
+          if [[ -z "${DESKTOP_PASSWORD:-}" ]]; then
+            echo '::error::Create the repository Actions secret DESKTOP_PASSWORD before starting Actions Desktop.'
+            exit 1
+          fi
+          if (( ${#DESKTOP_PASSWORD} < 16 )); then
+            echo '::error::DESKTOP_PASSWORD must contain at least 16 characters.'
+            exit 1
+          fi
+          echo "::add-mask::$DESKTOP_PASSWORD"
+
+      - name: Setup development toolchain
+        run: bash scripts/setup-actions-toolchain.sh
+
+      - name: Verify development toolchain
+        run: bash scripts/verify-toolchain.sh
+
+      - name: Start graphical desktop and web terminal
+        run: bash scripts/start-actions-desktop.sh
+
+      - name: Session information
+        run: |
+          echo "Desktop: ${DESKTOP_URL}"
+          echo "Terminal: ${DESKTOP_URL}/terminal/"
+          echo 'Username: devbox'
+          echo 'Password: value stored in the DESKTOP_PASSWORD repository secret.'
+          echo 'Keep this workflow running while you use the desktop.'
+
+      - name: Keep session alive
+        run: |
+          echo 'Actions Desktop session is active. Cancel this workflow when you are finished.'
+          sleep 19800

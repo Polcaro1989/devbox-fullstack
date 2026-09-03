@@ -1,13 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export NVM_DIR=/home/dev/.nvm
+export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
 if [[ -s "$NVM_DIR/nvm.sh" ]]; then
   # shellcheck disable=SC1090
   source "$NVM_DIR/nvm.sh"
 else
   echo 'NVM not found' >&2
   exit 1
+fi
+
+if [[ -d "$HOME/.dotnet-actions" ]]; then
+  export DOTNET_ROOT="$HOME/.dotnet-actions"
+  export PATH="$DOTNET_ROOT:$PATH"
 fi
 
 php --version

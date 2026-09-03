@@ -2,7 +2,7 @@ name: devbox-ci
 
 on:
   push:
-    branches: [main, feature/devbox-runtime]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -11,10 +11,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Static configuration contract
         run: bash tests/test-config.sh
+
+      - name: Validate Bash syntax
+        run: bash -n entrypoint.sh scripts/*.sh tests/test-config.sh
 
       - name: Validate Compose
         env:
@@ -24,5 +27,20 @@ jobs:
       - name: Build image
         run: docker build -t devbox-fullstack:test .
 
-      - name: Verify toolchain
+      - name: Verify Docker toolchain
         run: docker run --rm --entrypoint /usr/local/bin/verify-toolchain devbox-fullstack:test
+
+  desktop-smoke:
+    runs-on: ubuntu-latest
+    env:
+      ACTIONS_DESKTOP_SMOKE: 1
+      DESKTOP_PASSWORD: ci-smoke-only-not-a-real-secret
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Validate Bash syntax
+        run: bash -n scripts/start-actions-desktop.sh
+
+      - name: Start local desktop stack
+        run: bash scripts/start-actions-desktop.sh
