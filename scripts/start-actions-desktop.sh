@@ -111,7 +111,19 @@ for pid_file in "$RUNTIME_DIR"/*.pid; do
 done
 
 curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/vnc.html >/dev/null
-curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/terminal/ >/dev/null
+
+if ! curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/terminal/ >/dev/null; then
+  echo 'terminal proxy health check failed' >&2
+  echo 'direct ttyd HTTP status at /:' >&2
+  curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7681/ >&2 || true
+  echo 'direct ttyd HTTP status at /terminal/:' >&2
+  curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7681/terminal/ >&2 || true
+  echo 'ttyd log:' >&2
+  tail -n 80 "$RUNTIME_DIR/ttyd.log" >&2 || true
+  echo 'nginx error log:' >&2
+  sudo tail -n 80 /var/log/nginx/error.log >&2 || true
+  exit 1
+fi
 
 if [[ "${ACTIONS_DESKTOP_SMOKE:-0}" == '1' ]]; then
   echo 'PASS: local Actions Desktop stack is healthy'
