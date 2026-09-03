@@ -76,9 +76,8 @@ if grep -Eq 'repository_dispatch|workflow_run|gh workflow run|actions/workflows/
   fail 'Actions Desktop must not self-dispatch or chain new runs'
 fi
 
-require_literal scripts/setup-actions-toolchain.sh '--channel 8.0'
-require_literal scripts/setup-actions-toolchain.sh '--channel 9.0'
-require_literal scripts/setup-actions-toolchain.sh '--channel 10.0'
+require_literal scripts/setup-actions-toolchain.sh 'for channel in 8.0 9.0 10.0'
+require_literal scripts/setup-actions-toolchain.sh '--channel "$channel"'
 require_literal scripts/setup-actions-toolchain.sh 'nvm install --lts'
 
 DESKTOP_SCRIPT=scripts/start-actions-desktop.sh
