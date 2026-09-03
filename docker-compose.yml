@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      target: ssh-runtime
     container_name: devbox-fullstack
     restart: unless-stopped
     environment:
