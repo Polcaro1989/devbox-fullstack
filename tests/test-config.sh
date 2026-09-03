@@ -76,9 +76,21 @@ if grep -Eq 'repository_dispatch|workflow_run|gh workflow run|actions/workflows/
   fail 'Actions Desktop must not self-dispatch or chain new runs'
 fi
 
-require_literal scripts/setup-actions-toolchain.sh 'for channel in 8.0 9.0 10.0'
-require_literal scripts/setup-actions-toolchain.sh '--channel "$channel"'
-require_literal scripts/setup-actions-toolchain.sh 'nvm install --lts'
+SETUP=scripts/setup-actions-toolchain.sh
+require_literal "$SETUP" 'for channel in 8.0 9.0 10.0'
+require_literal "$SETUP" '--channel "$channel"'
+require_literal "$SETUP" 'nvm install --lts'
+
+nvm_disable_line=$(grep -nF 'set +u' "$SETUP" | head -n1 | cut -d: -f1 || true)
+nvm_source_line=$(grep -nF 'source "$NVM_DIR/nvm.sh"' "$SETUP" | head -n1 | cut -d: -f1 || true)
+nvm_use_line=$(grep -nF 'nvm use --lts' "$SETUP" | head -n1 | cut -d: -f1 || true)
+nvm_restore_line=$(grep -nF 'set -u' "$SETUP" | tail -n1 | cut -d: -f1 || true)
+if [[ -z "$nvm_disable_line" || -z "$nvm_source_line" || -z "$nvm_use_line" || -z "$nvm_restore_line" ]]; then
+  fail 'setup script must guard NVM calls from bash nounset'
+fi
+if ! (( nvm_disable_line < nvm_source_line && nvm_source_line < nvm_use_line && nvm_use_line < nvm_restore_line )); then
+  fail 'setup script must disable nounset before sourcing/using NVM and restore it afterward'
+fi
 
 DESKTOP_SCRIPT=scripts/start-actions-desktop.sh
 for text in 'Xvfb' 'fluxbox' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com' 'ACTIONS_DESKTOP_SMOKE'; do
