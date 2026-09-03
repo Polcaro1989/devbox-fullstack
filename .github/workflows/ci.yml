@@ -2,7 +2,7 @@ name: devbox-ci
 
 on:
   push:
-    branches: [main, feature/devbox-runtime]
+    branches: [main]
   pull_request:
     branches: [main]
 
@@ -11,18 +11,30 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Static configuration contract
         run: bash tests/test-config.sh
+
+      - name: Validate Dev Container JSON
+        run: jq empty .devcontainer/devcontainer.json
 
       - name: Validate Compose
         env:
           DEVBOX_SSH_PASSWORD: ci-only-placeholder-not-a-real-secret
         run: docker compose config >/dev/null
 
-      - name: Build image
-        run: docker build -t devbox-fullstack:test .
+      - name: Build SSH runtime image
+        run: docker build --target ssh-runtime -t devbox-fullstack:test .
 
-      - name: Verify toolchain
+      - name: Verify SSH runtime toolchain
         run: docker run --rm --entrypoint /usr/local/bin/verify-toolchain devbox-fullstack:test
+
+      - name: Build Codespaces toolchain target
+        run: docker build --target toolchain -t devbox-fullstack:toolchain-test .
+
+      - name: Verify Codespaces toolchain
+        run: docker run --rm --entrypoint /usr/local/bin/verify-toolchain devbox-fullstack:toolchain-test
+
+      - name: Build full Dev Container with desktop-lite
+        run: npx -y @devcontainers/cli@0.89.0 build --workspace-folder .
