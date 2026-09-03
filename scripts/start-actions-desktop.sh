@@ -13,7 +13,8 @@ mkdir -p "$RUNTIME_DIR"
 
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
-  xvfb fluxbox x11vnc novnc websockify xterm pcmanfm \
+  xvfb x11vnc novnc websockify \
+  xfce4 xfce4-session xfce4-panel xfce4-terminal thunar \
   nginx apache2-utils dbus-x11
 sudo rm -rf /var/lib/apt/lists/*
 
@@ -73,10 +74,36 @@ Xvfb :1 -screen 0 1440x900x24 -ac -nolisten tcp >"$RUNTIME_DIR/xvfb.log" 2>&1 &
 echo $! > "$RUNTIME_DIR/xvfb.pid"
 sleep 1
 
-fluxbox >"$RUNTIME_DIR/fluxbox.log" 2>&1 &
-echo $! > "$RUNTIME_DIR/fluxbox.pid"
+# Keep the whole XFCE session on one D-Bus session. Fresh runners sometimes
+# take a few seconds to spawn the panel/desktop, so start them as fallbacks
+# from inside the same D-Bus environment when needed.
+dbus-run-session -- bash -c '
+  xfce4-session &
+  session_pid=$!
+  sleep 5
+  pgrep -x xfce4-panel >/dev/null 2>&1 || xfce4-panel &
+  pgrep -x xfdesktop >/dev/null 2>&1 || xfdesktop &
+  wait "$session_pid"
+' >"$RUNTIME_DIR/xfce.log" 2>&1 &
+echo $! > "$RUNTIME_DIR/xfce.pid"
 
-xterm -geometry 120x35+20+20 -title 'Actions Desktop Terminal' >"$RUNTIME_DIR/xterm.log" 2>&1 &
+for _ in $(seq 1 20); do
+  if pgrep -x xfce4-session >/dev/null 2>&1 \
+    && pgrep -x xfce4-panel >/dev/null 2>&1 \
+    && pgrep -x xfdesktop >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! pgrep -x xfce4-session >/dev/null 2>&1 \
+  || ! pgrep -x xfce4-panel >/dev/null 2>&1 \
+  || ! pgrep -x xfdesktop >/dev/null 2>&1; then
+  echo 'XFCE desktop session failed to become ready' >&2
+  ps -ef | grep -E 'xfce|xfwm|xfdesktop' >&2 || true
+  tail -n 160 "$RUNTIME_DIR/xfce.log" >&2 || true
+  exit 1
+fi
 
 x11vnc \
   -display :1 \

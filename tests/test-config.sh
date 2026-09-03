@@ -22,7 +22,7 @@ require_literal() {
 for file in \
   Dockerfile docker-compose.yml entrypoint.sh \
   scripts/verify-toolchain.sh scripts/install-host.sh \
-  scripts/setup-actions-toolchain.sh scripts/start-actions-desktop.sh \
+  scripts/setup-actions-toolchain.sh scripts/cleanup-runner.sh scripts/start-actions-desktop.sh \
   .github/workflows/actions-desktop.yml .github/workflows/ci.yml \
   .env.example .gitignore .dockerignore; do
   require_file "$file"
@@ -66,8 +66,15 @@ require_literal "$WORKFLOW" 'workflow_dispatch:'
 require_literal "$WORKFLOW" 'runs-on: ubuntu-latest'
 require_literal "$WORKFLOW" 'timeout-minutes: 355'
 require_literal "$WORKFLOW" 'DESKTOP_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}'
+require_literal "$WORKFLOW" 'bash scripts/cleanup-runner.sh'
 require_literal "$WORKFLOW" 'bash scripts/setup-actions-toolchain.sh'
 require_literal "$WORKFLOW" 'bash scripts/start-actions-desktop.sh'
+
+cleanup_line=$(grep -nF 'bash scripts/cleanup-runner.sh' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
+setup_line=$(grep -nF 'bash scripts/setup-actions-toolchain.sh' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
+if [[ -z "$cleanup_line" || -z "$setup_line" ]] || ! (( cleanup_line < setup_line )); then
+  fail 'runner cleanup must happen before development toolchain setup'
+fi
 
 if grep -Eq '^[[:space:]]*schedule:' "$WORKFLOW"; then
   fail 'Actions Desktop must not have a scheduled trigger'
@@ -92,12 +99,23 @@ if ! (( nvm_disable_line < nvm_source_line && nvm_source_line < nvm_use_line && 
   fail 'setup script must disable nounset before sourcing/using NVM and restore it afterward'
 fi
 
+CLEANUP=scripts/cleanup-runner.sh
+for text in 'df -h /' '/usr/local/lib/android' '/opt/ghc' '/usr/local/.ghcup' '/opt/hostedtoolcache/CodeQL' 'docker system prune -af' 'apt-get clean'; do
+  require_literal "$CLEANUP" "$text"
+done
+if grep -Fq '/opt/hostedtoolcache/node' "$CLEANUP" || grep -Fq '/opt/hostedtoolcache/Python' "$CLEANUP"; then
+  fail 'cleanup must preserve hosted Node and Python tool caches for runner compatibility'
+fi
+
 DESKTOP_SCRIPT=scripts/start-actions-desktop.sh
-for text in 'Xvfb' 'fluxbox' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com' 'ACTIONS_DESKTOP_SMOKE'; do
+for text in 'Xvfb' 'xfce4-session' 'xfce4-panel' 'thunar' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com' 'ACTIONS_DESKTOP_SMOKE'; do
   require_literal "$DESKTOP_SCRIPT" "$text"
 done
 require_literal "$DESKTOP_SCRIPT" 'auth_basic'
 require_literal "$DESKTOP_SCRIPT" '/terminal/'
+if grep -Fq 'fluxbox' "$DESKTOP_SCRIPT"; then
+  fail 'Actions Desktop must use XFCE instead of Fluxbox'
+fi
 
 CI=.github/workflows/ci.yml
 require_literal "$CI" 'desktop-smoke:'

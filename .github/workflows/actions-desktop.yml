@@ -34,6 +34,9 @@ jobs:
           fi
           echo "::add-mask::$DESKTOP_PASSWORD"
 
+      - name: Reclaim runner disk space
+        run: bash scripts/cleanup-runner.sh
+
       - name: Setup development toolchain
         run: bash scripts/setup-actions-toolchain.sh
 
