@@ -1,0 +1,19 @@
+services:
+  devbox:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: devbox-fullstack
+    restart: unless-stopped
+    environment:
+      DEVBOX_SSH_PASSWORD: ${DEVBOX_SSH_PASSWORD:?set DEVBOX_SSH_PASSWORD in .env}
+    ports:
+      - "${SSH_PORT:-2222}:22"
+    volumes:
+      - "${WORKSPACE_PATH:-./workspace}:/workspace"
+      - devbox_ssh_keys:/var/lib/devbox-ssh
+    tty: true
+    stdin_open: true
+
+volumes:
+  devbox_ssh_keys:
