@@ -23,7 +23,7 @@ for file in \
   Dockerfile docker-compose.yml entrypoint.sh \
   scripts/verify-toolchain.sh scripts/install-host.sh \
   scripts/setup-actions-toolchain.sh scripts/start-actions-desktop.sh \
-  .github/workflows/actions-desktop.yml \
+  .github/workflows/actions-desktop.yml .github/workflows/ci.yml \
   .env.example .gitignore .dockerignore; do
   require_file "$file"
 done
@@ -81,11 +81,17 @@ require_literal scripts/setup-actions-toolchain.sh '--channel "$channel"'
 require_literal scripts/setup-actions-toolchain.sh 'nvm install --lts'
 
 DESKTOP_SCRIPT=scripts/start-actions-desktop.sh
-for text in 'Xvfb' 'fluxbox' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com'; do
+for text in 'Xvfb' 'fluxbox' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com' 'ACTIONS_DESKTOP_SMOKE'; do
   require_literal "$DESKTOP_SCRIPT" "$text"
 done
 require_literal "$DESKTOP_SCRIPT" 'auth_basic'
 require_literal "$DESKTOP_SCRIPT" '/terminal/'
+
+CI=.github/workflows/ci.yml
+require_literal "$CI" 'desktop-smoke:'
+require_literal "$CI" 'ACTIONS_DESKTOP_SMOKE: 1'
+require_literal "$CI" 'DESKTOP_PASSWORD: ci-smoke-only-not-a-real-secret'
+require_literal "$CI" 'bash scripts/start-actions-desktop.sh'
 
 if grep -R --exclude='.env.example' --exclude='test-config.sh' -E 'DEVBOX_SSH_PASSWORD=[^$<{[:space:]][^[:space:]]{8,}' . >/dev/null 2>&1; then
   fail 'a concrete DEVBOX_SSH_PASSWORD appears to be committed'
