@@ -34,11 +34,14 @@ require_literal Dockerfile 'openssh-server'
 require_literal Dockerfile 'PasswordAuthentication yes'
 require_literal Dockerfile 'PermitRootLogin no'
 require_literal Dockerfile 'AllowUsers dev'
-require_literal Dockerfile '--channel 7.0'
 require_literal Dockerfile '--channel 8.0'
 require_literal Dockerfile '--channel 9.0'
 require_literal Dockerfile '--channel 10.0'
 require_literal Dockerfile 'nvm install --lts'
+
+if grep -Fq -- '--channel 7.0' Dockerfile; then
+  fail 'Dockerfile must not install .NET 7'
+fi
 
 require_literal entrypoint.sh 'DEVBOX_SSH_PASSWORD'
 require_literal entrypoint.sh 'chpasswd'
