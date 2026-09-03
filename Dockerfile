@@ -1,4 +1,4 @@
-FROM ubuntu:24.04
+FROM ubuntu:24.04 AS toolchain
 
 ENV DEBIAN_FRONTEND=noninteractive \
     DOTNET_ROOT=/usr/share/dotnet \
@@ -7,7 +7,6 @@ ENV DEBIAN_FRONTEND=noninteractive \
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates curl wget git unzip zip xz-utils jq sudo \
     build-essential pkg-config libicu-dev libssl-dev zlib1g-dev \
-    openssh-server \
     php-cli php-curl php-mbstring php-xml php-zip php-bcmath php-intl php-sqlite3 \
     composer \
     python3 python3-pip python3-venv \
@@ -17,16 +16,8 @@ RUN useradd -m -s /bin/bash dev \
     && usermod -aG sudo dev \
     && echo 'dev ALL=(ALL) NOPASSWD:ALL' >/etc/sudoers.d/dev \
     && chmod 0440 /etc/sudoers.d/dev \
-    && mkdir -p /run/sshd /workspace /var/lib/devbox-ssh \
+    && mkdir -p /workspace \
     && chown -R dev:dev /workspace /home/dev
-
-RUN printf '%s\n' \
-    'PasswordAuthentication yes' \
-    'PermitRootLogin no' \
-    'PubkeyAuthentication yes' \
-    'AllowUsers dev' \
-    'UsePAM yes' \
-    > /etc/ssh/sshd_config.d/99-devbox.conf
 
 RUN curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh \
     && chmod +x /tmp/dotnet-install.sh \
@@ -42,9 +33,29 @@ RUN curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh |
     && printf '\nexport NVM_DIR="$HOME/.nvm"\n[ -s "$NVM_DIR/nvm.sh" ] && . "$NVM_DIR/nvm.sh"\n' >> /home/dev/.bashrc
 
 USER root
-COPY entrypoint.sh /usr/local/bin/devbox-entrypoint
 COPY scripts/verify-toolchain.sh /usr/local/bin/verify-toolchain
-RUN chmod +x /usr/local/bin/devbox-entrypoint /usr/local/bin/verify-toolchain
+RUN chmod +x /usr/local/bin/verify-toolchain
+
+USER dev
+WORKDIR /workspace
+
+FROM toolchain AS ssh-runtime
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends openssh-server \
+    && rm -rf /var/lib/apt/lists/* \
+    && mkdir -p /run/sshd /var/lib/devbox-ssh \
+    && chmod 700 /var/lib/devbox-ssh \
+    && printf '%s\n' \
+       'PasswordAuthentication yes' \
+       'PermitRootLogin no' \
+       'PubkeyAuthentication yes' \
+       'AllowUsers dev' \
+       'UsePAM yes' \
+       > /etc/ssh/sshd_config.d/99-devbox.conf
+
+COPY entrypoint.sh /usr/local/bin/devbox-entrypoint
+RUN chmod +x /usr/local/bin/devbox-entrypoint
 
 WORKDIR /workspace
 EXPOSE 22
