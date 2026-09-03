@@ -1,0 +1,28 @@
+name: devbox-ci
+
+on:
+  push:
+    branches: [main, feature/devbox-runtime]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build-and-verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Static configuration contract
+        run: bash tests/test-config.sh
+
+      - name: Validate Compose
+        env:
+          DEVBOX_SSH_PASSWORD: ci-only-placeholder-not-a-real-secret
+        run: docker compose config >/dev/null
+
+      - name: Build image
+        run: docker build -t devbox-fullstack:test .
+
+      - name: Verify toolchain
+        run: docker run --rm --entrypoint /usr/local/bin/verify-toolchain devbox-fullstack:test
