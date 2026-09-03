@@ -27,8 +27,11 @@ sudo curl -fsSL \
   -o /usr/local/bin/cloudflared
 sudo chmod +x /usr/local/bin/cloudflared
 
-AUTH_FILE="$RUNTIME_DIR/htpasswd"
-htpasswd -bcB "$AUTH_FILE" devbox "$DESKTOP_PASSWORD" >/dev/null
+AUTH_TMP="$RUNTIME_DIR/htpasswd"
+AUTH_FILE="/etc/nginx/actions-desktop.htpasswd"
+htpasswd -bcB "$AUTH_TMP" devbox "$DESKTOP_PASSWORD" >/dev/null
+sudo install -o root -g www-data -m 640 "$AUTH_TMP" "$AUTH_FILE"
+rm -f "$AUTH_TMP"
 
 cat > "$RUNTIME_DIR/nginx.conf" <<EOF
 server {
