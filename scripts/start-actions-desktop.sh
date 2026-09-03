@@ -110,6 +110,11 @@ done
 curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/vnc.html >/dev/null
 curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/terminal/ >/dev/null
 
+if [[ "${ACTIONS_DESKTOP_SMOKE:-0}" == '1' ]]; then
+  echo 'PASS: local Actions Desktop stack is healthy'
+  exit 0
+fi
+
 TUNNEL_LOG="$RUNTIME_DIR/cloudflared.log"
 cloudflared tunnel --url http://127.0.0.1:8080 --no-autoupdate >"$TUNNEL_LOG" 2>&1 &
 echo $! > "$RUNTIME_DIR/cloudflared.pid"
