@@ -74,18 +74,34 @@ Xvfb :1 -screen 0 1440x900x24 -ac -nolisten tcp >"$RUNTIME_DIR/xvfb.log" 2>&1 &
 echo $! > "$RUNTIME_DIR/xvfb.pid"
 sleep 1
 
-dbus-run-session -- xfce4-session >"$RUNTIME_DIR/xfce.log" 2>&1 &
+# Keep the whole XFCE session on one D-Bus session. Fresh runners sometimes
+# take a few seconds to spawn the panel/desktop, so start them as fallbacks
+# from inside the same D-Bus environment when needed.
+dbus-run-session -- bash -c '
+  xfce4-session &
+  session_pid=$!
+  sleep 5
+  pgrep -x xfce4-panel >/dev/null 2>&1 || xfce4-panel &
+  pgrep -x xfdesktop >/dev/null 2>&1 || xfdesktop &
+  wait "$session_pid"
+' >"$RUNTIME_DIR/xfce.log" 2>&1 &
 echo $! > "$RUNTIME_DIR/xfce.pid"
-sleep 5
 
-if ! pgrep -f 'xfce4-session' >/dev/null 2>&1; then
-  echo 'XFCE session failed to start' >&2
-  tail -n 120 "$RUNTIME_DIR/xfce.log" >&2 || true
-  exit 1
-fi
-if ! pgrep -f 'xfce4-panel' >/dev/null 2>&1; then
-  echo 'XFCE panel failed to start' >&2
-  tail -n 120 "$RUNTIME_DIR/xfce.log" >&2 || true
+for _ in $(seq 1 20); do
+  if pgrep -x xfce4-session >/dev/null 2>&1 \
+    && pgrep -x xfce4-panel >/dev/null 2>&1 \
+    && pgrep -x xfdesktop >/dev/null 2>&1; then
+    break
+  fi
+  sleep 1
+done
+
+if ! pgrep -x xfce4-session >/dev/null 2>&1 \
+  || ! pgrep -x xfce4-panel >/dev/null 2>&1 \
+  || ! pgrep -x xfdesktop >/dev/null 2>&1; then
+  echo 'XFCE desktop session failed to become ready' >&2
+  ps -ef | grep -E 'xfce|xfwm|xfdesktop' >&2 || true
+  tail -n 160 "$RUNTIME_DIR/xfce.log" >&2 || true
   exit 1
 fi
 
