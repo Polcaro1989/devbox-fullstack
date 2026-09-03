@@ -1,44 +1,57 @@
 # Devbox Fullstack Design
 
 ## Goal
-Create a reusable Docker-based development environment that starts with PHP, Python, Node.js managed by NVM, and .NET SDKs 7, 8, 9 and 10 already available in the same container.
+Create a reusable Docker-based development environment with PHP, Python, Node.js managed by NVM, and .NET SDKs 8, 9 and 10 available side by side, plus password-based SSH access and 24/7 operation.
 
 ## Architecture
-Use one Ubuntu 24.04 based image built by a `Dockerfile` and started through `docker-compose.yml`. The repository itself is mounted at `/workspace`, so projects can be edited on the host while tools execute inside the container.
+Use one Ubuntu 24.04 based image built by a `Dockerfile` and started through `docker-compose.yml`. A configurable host workspace path is mounted at `/workspace`, so projects can be edited on the host while tools execute inside the container.
 
-The .NET SDKs will be installed side by side under the standard `dotnet` location so `dotnet --list-sdks` exposes 7.x, 8.x, 9.x and 10.x. Individual projects can select an SDK with `global.json`.
+The .NET SDKs are installed side by side under `/usr/share/dotnet` so `dotnet --list-sdks` exposes 8.x, 9.x and 10.x. Individual projects can select an SDK with `global.json`.
 
-NVM will be installed for a non-root development user, with the current Node.js LTS installed by default. PHP and Python will come from Ubuntu packages, together with Composer, pip and common build tools.
+NVM is installed for a non-root `dev` user, with the current Node.js LTS installed by default. PHP, Composer, Python, pip, Git and common build tools are included.
+
+OpenSSH Server runs inside the container. SSH login is enabled for the non-root `dev` user on host port `2222` by default, mapped to container port `22`. Root SSH login is disabled. Password authentication is enabled, but the password is injected at runtime through `DEVBOX_SSH_PASSWORD` from a local `.env` file that is ignored by Git; no password or password hash is committed to the repository.
 
 ## Files
-- `Dockerfile` — builds the development image and installs all runtimes and tooling.
-- `docker-compose.yml` — starts the devbox and mounts the repository into `/workspace`.
-- `scripts/verify-toolchain.sh` — verifies PHP, Composer, Python, pip, NVM, Node, npm and all four .NET SDK major versions.
-- `scripts/start-devbox.sh` — starts the Compose service.
-- `scripts/stop-devbox.sh` — stops the Compose service.
-- `systemd/devbox-start.service` and `systemd/devbox-start.timer` — start the devbox every day at 00:00 local host time.
-- `systemd/devbox-stop.service` and `systemd/devbox-stop.timer` — stop the devbox every day at 13:00 local host time.
+- `Dockerfile` — builds the development image and installs runtimes, SSH and tooling.
+- `docker-compose.yml` — starts the devbox, mounts a configurable workspace into `/workspace`, exposes SSH, requires `DEVBOX_SSH_PASSWORD`, and uses `restart: unless-stopped`.
+- `entrypoint.sh` — validates `DEVBOX_SSH_PASSWORD`, sets the `dev` password, creates persistent SSH host keys when necessary and starts `sshd` in the foreground.
+- `scripts/verify-toolchain.sh` — verifies PHP, Composer, Python, pip, NVM, Node, npm and all three .NET SDK major versions.
+- `scripts/install-host.sh` — validates the local `.env`, enables and starts the Docker service with systemd when available, then builds and starts the Compose service.
+- `.env.example` — documents required runtime variables without containing a real secret.
+- `.gitignore` — excludes `.env` and local workspace artifacts.
 - `.dockerignore` — keeps unnecessary files out of the image build context.
-- `README.md` — build, start, shell, schedule and version-selection instructions.
+- `tests/test-config.sh` — static validation for required security, runtime and always-on configuration.
+- `.github/workflows/ci.yml` — validates Compose configuration, builds the image and runs the toolchain verification script.
+- `README.md` — build, start, SSH, autostart and version-selection instructions.
 
 ## Runtime behavior
-The container is scheduled to run every day for a 13-hour window, from 00:00 through 13:00 in the Linux host's local timezone. `systemd` timers on the host trigger `docker compose up -d` at 00:00 and `docker compose stop` at 13:00.
+The container is intended to remain running continuously, 24 hours per day. Compose uses `restart: unless-stopped`, so an existing container is restarted automatically after a Docker daemon or host restart unless it was explicitly stopped by an administrator.
 
-The container uses `/workspace` as its working directory. It will not run Docker-in-Docker and will not contain project-specific databases or services; those can be added later as separate Compose services when needed.
+On Linux hosts that use systemd, the one-time host installation script runs `systemctl enable --now docker` when possible, ensuring the Docker daemon itself starts on boot. It then runs `docker compose up -d --build` so the devbox exists and is eligible for automatic restart thereafter.
 
-The Compose service will use a restart policy suitable for recovering from an unexpected container failure while inside the daily runtime window. The stop timer remains authoritative at 13:00.
+The container uses `/workspace` as its working directory. It does not run Docker-in-Docker and does not include project-specific databases or services.
+
+## SSH security
+Password-based SSH is enabled because it was explicitly requested. Root login remains disabled and only the `dev` account is allowed through SSH. The password is never baked into the image and never committed; the host's ignored `.env` provides it at container start.
+
+Persistent SSH host keys are stored in a named Docker volume so recreating or restarting the container does not unexpectedly change the host fingerprint.
 
 ## Security and maintenance
-No tokens, SSH keys, API keys or user secrets will be committed. Versions that have reached end of support, such as older .NET SDK lines, remain available only because they were explicitly requested. The image should be rebuilt periodically to refresh OS packages and the current Node.js LTS patch release.
+No tokens, API keys, SSH private keys or user passwords are committed. `.env` is ignored by Git. The SSH password should be long, random and unique to this devbox.
+
+The image should be rebuilt periodically to refresh OS packages, Node.js LTS and SDK patch releases.
 
 ## Validation
-A successful build must satisfy all of the following inside the container:
+A successful image must satisfy all of the following inside the container:
 - `php --version` succeeds.
 - `composer --version` succeeds.
 - `python3 --version` and `pip3 --version` succeed.
 - `nvm --version`, `node --version` and `npm --version` succeed.
-- `dotnet --list-sdks` contains at least one 7.x, 8.x, 9.x and 10.x SDK.
+- `dotnet --list-sdks` contains at least one 8.x, 9.x and 10.x SDK and no 7.x SDK.
+- `sshd` is installed and configured with `PasswordAuthentication yes`, `PermitRootLogin no` and `AllowUsers dev`.
+- Compose exposes SSH on `${SSH_PORT:-2222}:22`, requires `DEVBOX_SSH_PASSWORD`, and uses `restart: unless-stopped`.
+- `.env` is ignored by Git.
+- The host installation script enables Docker on boot when systemd is available and starts the Compose project.
 
-The scheduling setup must also be verifiable with `systemctl list-timers` and show a start timer for 00:00 and a stop timer for 13:00.
-
-The verification script must fail with a non-zero exit code if any required runtime is missing.
+`tests/test-config.sh` must fail with a non-zero exit code if any required configuration is missing. GitHub Actions must build the image and execute `scripts/verify-toolchain.sh` successfully before the implementation is considered complete.
