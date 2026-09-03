@@ -13,7 +13,8 @@ mkdir -p "$RUNTIME_DIR"
 
 sudo apt-get update
 sudo apt-get install -y --no-install-recommends \
-  xvfb fluxbox x11vnc novnc websockify xterm pcmanfm \
+  xvfb x11vnc novnc websockify \
+  xfce4 xfce4-session xfce4-panel xfce4-terminal thunar \
   nginx apache2-utils dbus-x11
 sudo rm -rf /var/lib/apt/lists/*
 
@@ -73,10 +74,20 @@ Xvfb :1 -screen 0 1440x900x24 -ac -nolisten tcp >"$RUNTIME_DIR/xvfb.log" 2>&1 &
 echo $! > "$RUNTIME_DIR/xvfb.pid"
 sleep 1
 
-fluxbox >"$RUNTIME_DIR/fluxbox.log" 2>&1 &
-echo $! > "$RUNTIME_DIR/fluxbox.pid"
+dbus-run-session -- xfce4-session >"$RUNTIME_DIR/xfce.log" 2>&1 &
+echo $! > "$RUNTIME_DIR/xfce.pid"
+sleep 5
 
-xterm -geometry 120x35+20+20 -title 'Actions Desktop Terminal' >"$RUNTIME_DIR/xterm.log" 2>&1 &
+if ! pgrep -f 'xfce4-session' >/dev/null 2>&1; then
+  echo 'XFCE session failed to start' >&2
+  tail -n 120 "$RUNTIME_DIR/xfce.log" >&2 || true
+  exit 1
+fi
+if ! pgrep -f 'xfce4-panel' >/dev/null 2>&1; then
+  echo 'XFCE panel failed to start' >&2
+  tail -n 120 "$RUNTIME_DIR/xfce.log" >&2 || true
+  exit 1
+fi
 
 x11vnc \
   -display :1 \
