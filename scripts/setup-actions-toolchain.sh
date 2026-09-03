@@ -16,11 +16,14 @@ export NVM_DIR="$HOME/.nvm"
 if [[ ! -s "$NVM_DIR/nvm.sh" ]]; then
   curl -fsSL https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash
 fi
+# NVM is not nounset-safe internally. Disable nounset only while loading/using it.
+set +u
 # shellcheck disable=SC1090
 source "$NVM_DIR/nvm.sh"
 nvm install --lts
 nvm alias default 'lts/*'
 nvm use --lts
+set -u
 
 DOTNET_DIR="$HOME/.dotnet-actions"
 mkdir -p "$DOTNET_DIR"
@@ -28,7 +31,7 @@ curl -fsSL https://dot.net/v1/dotnet-install.sh -o /tmp/dotnet-install.sh
 chmod +x /tmp/dotnet-install.sh
 for channel in 8.0 9.0 10.0; do
   /tmp/dotnet-install.sh --channel "$channel" --install-dir "$DOTNET_DIR" --no-path
- done
+done
 rm -f /tmp/dotnet-install.sh
 
 export DOTNET_ROOT="$DOTNET_DIR"
