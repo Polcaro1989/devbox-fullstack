@@ -45,14 +45,14 @@ server {
         return 302 /vnc.html?autoconnect=true&resize=scale&path=websockify;
     }
 
-    location ~ ^/terminal(.*)$ {
+    location /terminal/ {
         proxy_http_version 1.1;
         proxy_set_header Host \$host;
         proxy_set_header X-Forwarded-Proto \$scheme;
         proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
         proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "upgrade";
-        proxy_pass http://127.0.0.1:7681/\$1;
+        proxy_pass http://127.0.0.1:7681;
     }
 
     location / {
@@ -126,8 +126,6 @@ fi
 
 if ! curl -fsS --user "devbox:${DESKTOP_PASSWORD}" http://127.0.0.1:8080/terminal/ >/dev/null; then
   echo 'terminal proxy health check failed' >&2
-  echo 'direct ttyd HTTP status at /:' >&2
-  curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7681/ >&2 || true
   echo 'direct ttyd HTTP status at /terminal/:' >&2
   curl -sS -o /dev/null -w '%{http_code}\n' http://127.0.0.1:7681/terminal/ >&2 || true
   echo 'ttyd log:' >&2
