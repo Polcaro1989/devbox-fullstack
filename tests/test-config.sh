@@ -22,14 +22,17 @@ require_literal() {
 for file in \
   Dockerfile docker-compose.yml entrypoint.sh \
   scripts/verify-toolchain.sh scripts/install-host.sh \
-  scripts/setup-actions-toolchain.sh scripts/cleanup-runner.sh scripts/start-actions-desktop.sh \
+  scripts/setup-actions-toolchain.sh scripts/cleanup-runner.sh scripts/start-actions-server.sh \
   .github/workflows/actions-desktop.yml .github/workflows/ci.yml \
   .env.example .gitignore .dockerignore; do
   require_file "$file"
 done
 
+if [[ -e scripts/start-actions-desktop.sh ]]; then
+  fail 'graphical Actions Desktop launcher must be removed in SSH-only server mode'
+fi
 if [[ -e .devcontainer/devcontainer.json ]]; then
-  fail 'Codespaces configuration must not exist in the final Actions Desktop implementation'
+  fail 'Codespaces configuration must not exist in the final Actions Server implementation'
 fi
 
 require_literal docker-compose.yml 'restart: unless-stopped'
@@ -61,26 +64,37 @@ require_literal scripts/install-host.sh 'systemctl enable --now docker'
 require_literal scripts/install-host.sh 'docker compose up -d --build'
 
 WORKFLOW=.github/workflows/actions-desktop.yml
-require_literal "$WORKFLOW" 'name: Actions Desktop'
+require_literal "$WORKFLOW" 'name: Actions Server'
 require_literal "$WORKFLOW" 'workflow_dispatch:'
 require_literal "$WORKFLOW" 'runs-on: ubuntu-latest'
 require_literal "$WORKFLOW" 'timeout-minutes: 355'
-require_literal "$WORKFLOW" 'DESKTOP_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}'
+require_literal "$WORKFLOW" 'SSH_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}'
+require_literal "$WORKFLOW" 'TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}'
+require_literal "$WORKFLOW" 'uses: tailscale/github-action@v4'
+require_literal "$WORKFLOW" 'authkey: ${{ secrets.TAILSCALE_AUTHKEY }}'
 require_literal "$WORKFLOW" 'bash scripts/cleanup-runner.sh'
 require_literal "$WORKFLOW" 'bash scripts/setup-actions-toolchain.sh'
-require_literal "$WORKFLOW" 'bash scripts/start-actions-desktop.sh'
+require_literal "$WORKFLOW" 'bash scripts/start-actions-server.sh'
 
 cleanup_line=$(grep -nF 'bash scripts/cleanup-runner.sh' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
 setup_line=$(grep -nF 'bash scripts/setup-actions-toolchain.sh' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
+tailscale_line=$(grep -nF 'uses: tailscale/github-action@v4' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
+server_line=$(grep -nF 'bash scripts/start-actions-server.sh' "$WORKFLOW" | head -n1 | cut -d: -f1 || true)
 if [[ -z "$cleanup_line" || -z "$setup_line" ]] || ! (( cleanup_line < setup_line )); then
   fail 'runner cleanup must happen before development toolchain setup'
 fi
+if [[ -z "$tailscale_line" || -z "$server_line" ]] || ! (( tailscale_line < server_line )); then
+  fail 'Tailscale must connect before the SSH server binds to its private address'
+fi
 
 if grep -Eq '^[[:space:]]*schedule:' "$WORKFLOW"; then
-  fail 'Actions Desktop must not have a scheduled trigger'
+  fail 'Actions Server must not have a scheduled trigger'
 fi
 if grep -Eq 'repository_dispatch|workflow_run|gh workflow run|actions/workflows/.*/dispatches' "$WORKFLOW"; then
-  fail 'Actions Desktop must not self-dispatch or chain new runs'
+  fail 'Actions Server must not self-dispatch or chain new runs'
+fi
+if grep -Eq 'start-actions-desktop|noVNC|cloudflared|graphical desktop|DESKTOP_URL' "$WORKFLOW"; then
+  fail 'Actions Server workflow must not start the old graphical desktop stack'
 fi
 
 SETUP=scripts/setup-actions-toolchain.sh
@@ -107,28 +121,32 @@ if grep -Fq '/opt/hostedtoolcache/node' "$CLEANUP" || grep -Fq '/opt/hostedtoolc
   fail 'cleanup must preserve hosted Node and Python tool caches for runner compatibility'
 fi
 
-DESKTOP_SCRIPT=scripts/start-actions-desktop.sh
-for text in 'Xvfb' 'xfce4-session' 'xfce4-panel' 'thunar' 'x11vnc' 'websockify' 'ttyd' 'nginx' 'htpasswd' 'cloudflared' '127.0.0.1' 'DESKTOP_PASSWORD' 'trycloudflare.com' 'ACTIONS_DESKTOP_SMOKE'; do
-  require_literal "$DESKTOP_SCRIPT" "$text"
+SERVER_SCRIPT=scripts/start-actions-server.sh
+for text in 'openssh-server' 'SSH_PASSWORD' 'tailscale ip -4' 'chpasswd' 'PasswordAuthentication yes' 'PermitRootLogin no' 'AllowUsers runner' 'ListenAddress $TAILSCALE_IP' 'sshd -D -e' 'ACTIONS_SERVER_SMOKE'; do
+  require_literal "$SERVER_SCRIPT" "$text"
 done
-require_literal "$DESKTOP_SCRIPT" 'auth_basic'
-require_literal "$DESKTOP_SCRIPT" '/terminal/'
-if grep -Fq 'fluxbox' "$DESKTOP_SCRIPT"; then
-  fail 'Actions Desktop must use XFCE instead of Fluxbox'
-fi
+for forbidden in Xvfb xfce4 noVNC novnc x11vnc websockify ttyd nginx cloudflared fluxbox; do
+  if grep -Fiq "$forbidden" "$SERVER_SCRIPT"; then
+    fail "SSH-only server script must not contain graphical/web desktop dependency: $forbidden"
+  fi
+done
 
 CI=.github/workflows/ci.yml
-require_literal "$CI" 'desktop-smoke:'
-require_literal "$CI" 'ACTIONS_DESKTOP_SMOKE: 1'
-require_literal "$CI" 'DESKTOP_PASSWORD: ci-smoke-only-not-a-real-secret'
-require_literal "$CI" 'bash scripts/start-actions-desktop.sh'
+require_literal "$CI" 'server-smoke:'
+require_literal "$CI" 'ACTIONS_SERVER_SMOKE: 1'
+require_literal "$CI" 'SSH_PASSWORD: ci-smoke-only-not-a-real-secret'
+require_literal "$CI" 'TAILSCALE_IP: 127.0.0.1'
+require_literal "$CI" 'SSH_PORT: 2222'
+require_literal "$CI" 'bash scripts/start-actions-server.sh'
+if grep -Fq 'desktop-smoke:' "$CI"; then
+  fail 'CI must use the SSH server smoke test instead of the old desktop smoke test'
+fi
 
 if grep -R --exclude='.env.example' --exclude='test-config.sh' -E 'DEVBOX_SSH_PASSWORD=[^$<{[:space:]][^[:space:]]{8,}' . >/dev/null 2>&1; then
   fail 'a concrete DEVBOX_SSH_PASSWORD appears to be committed'
 fi
-
-if grep -R --exclude='test-config.sh' -E 'DESKTOP_PASSWORD=[A-Za-z0-9][^$<{[:space:]]{7,}' . >/dev/null 2>&1; then
-  fail 'a concrete DESKTOP_PASSWORD appears to be committed'
+if grep -R --exclude='test-config.sh' -E 'tskey-auth-[A-Za-z0-9_-]+' . >/dev/null 2>&1; then
+  fail 'a concrete Tailscale auth key appears to be committed'
 fi
 
-echo 'PASS: Actions Desktop configuration contract satisfied'
+echo 'PASS: Actions Server SSH configuration contract satisfied'
