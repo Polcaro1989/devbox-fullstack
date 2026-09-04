@@ -16,6 +16,8 @@ cleanup() {
 }
 trap cleanup EXIT
 
+export GNUPGHOME="$work_dir/gnupg"
+mkdir -m 700 "$GNUPGHOME"
 state_prepare_git_auth "$work_dir"
 remote_url="$(state_remote_url)"
 repo_dir="$work_dir/repo"
