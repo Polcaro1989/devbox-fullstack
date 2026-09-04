@@ -1,0 +1,22 @@
+# GitHub Actions runtime checkout and transient credentials
+work
+
+# Rebuildable caches and toolchains installed by the workflow
+.cache
+.npm
+.nuget/packages
+.nvm
+.dotnet-actions
+.local/share/Trash
+
+# Common rebuildable project dependencies/output
+node_modules
+.venv
+venv
+.next
+__pycache__
+.pytest_cache
+
+# Desktop/editor trash and noise
+.DS_Store
+Thumbs.db

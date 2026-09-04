@@ -17,19 +17,30 @@ jobs:
     env:
       SSH_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}
       TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
+      DEVBOX_STATE_REPO: Polcaro1989/Repository-
+      DEVBOX_STATE_TOKEN: ${{ secrets.DEVBOX_STATE_TOKEN }}
+      DEVBOX_STATE_PASSWORD: ${{ secrets.DEVBOX_STATE_PASSWORD }}
+      DEVBOX_STATE_BRANCH: devbox-state
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          persist-credentials: false
 
-      - name: Validate SSH access secrets
+      - name: Validate access and persistence secrets
         shell: bash
         run: |
           test -n "${SSH_PASSWORD:-}" || { echo '::error::DESKTOP_PASSWORD is required.'; exit 1; }
           (( ${#SSH_PASSWORD} >= 16 )) || { echo '::error::DESKTOP_PASSWORD must contain at least 16 characters.'; exit 1; }
           test -n "${TAILSCALE_AUTHKEY:-}" || { echo '::error::TAILSCALE_AUTHKEY is required.'; exit 1; }
+          test -n "${DEVBOX_STATE_TOKEN:-}" || { echo '::error::DEVBOX_STATE_TOKEN is required.'; exit 1; }
+          test -n "${DEVBOX_STATE_PASSWORD:-}" || { echo '::error::DEVBOX_STATE_PASSWORD is required.'; exit 1; }
+          (( ${#DEVBOX_STATE_PASSWORD} >= 24 )) || { echo '::error::DEVBOX_STATE_PASSWORD must contain at least 24 characters.'; exit 1; }
           echo "::add-mask::$SSH_PASSWORD"
           echo "::add-mask::$TAILSCALE_AUTHKEY"
+          echo "::add-mask::$DEVBOX_STATE_TOKEN"
+          echo "::add-mask::$DEVBOX_STATE_PASSWORD"
 
       - name: Reclaim runner disk space
         run: bash scripts/cleanup-runner.sh
@@ -39,6 +50,15 @@ jobs:
 
       - name: Verify development toolchain
         run: bash scripts/verify-toolchain.sh
+
+      - name: Install persistent state dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends zstd gnupg
+          sudo rm -rf /var/lib/apt/lists/*
+
+      - name: Restore persistent user state
+        run: bash scripts/restore-git-state.sh
 
       - name: Connect private Tailscale network
         uses: tailscale/github-action@v4
@@ -54,9 +74,18 @@ jobs:
           echo "SSH: ssh -p ${SSH_PORT} runner@${SSH_HOST}"
           echo 'Username: runner'
           echo 'Password: use the existing DESKTOP_PASSWORD repository secret.'
+          echo 'Persistent state: encrypted private Git repository, checkpoint every 15 minutes.'
           echo 'Connect your computer to the same Tailscale network first.'
+          touch /tmp/devbox-session-ready
 
-      - name: Keep session alive
+      - name: Keep session alive with persistent checkpoints
+        run: bash scripts/state-session-loop.sh
+
+      - name: Final persistent state save
+        if: always()
         run: |
-          echo 'Actions Server session is active. Cancel this workflow when you are finished.'
-          sleep 19800
+          if [[ -f /tmp/devbox-session-ready ]]; then
+            bash scripts/save-git-state.sh
+          else
+            echo 'Session never became ready; refusing to overwrite the previous persistent state.'
+          fi
