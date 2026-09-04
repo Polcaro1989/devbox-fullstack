@@ -30,17 +30,19 @@ jobs:
       - name: Verify Docker toolchain
         run: docker run --rm --entrypoint /usr/local/bin/verify-toolchain devbox-fullstack:test
 
-  desktop-smoke:
+  server-smoke:
     runs-on: ubuntu-latest
     env:
-      ACTIONS_DESKTOP_SMOKE: 1
-      DESKTOP_PASSWORD: ci-smoke-only-not-a-real-secret
+      ACTIONS_SERVER_SMOKE: 1
+      SSH_PASSWORD: ci-smoke-only-not-a-real-secret
+      TAILSCALE_IP: 127.0.0.1
+      SSH_PORT: 2222
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
       - name: Validate Bash syntax
-        run: bash -n scripts/start-actions-desktop.sh
+        run: bash -n scripts/start-actions-server.sh
 
-      - name: Start local desktop stack
-        run: bash scripts/start-actions-desktop.sh
+      - name: Start local SSH stack
+        run: bash scripts/start-actions-server.sh
