@@ -122,7 +122,7 @@ if grep -Fq '/opt/hostedtoolcache/node' "$CLEANUP" || grep -Fq '/opt/hostedtoolc
 fi
 
 SERVER_SCRIPT=scripts/start-actions-server.sh
-for text in 'openssh-server' 'SSH_PASSWORD' 'tailscale ip -4' 'chpasswd' 'PasswordAuthentication yes' 'PermitRootLogin no' 'AllowUsers runner' 'ListenAddress $TAILSCALE_IP' 'sshd -D -e' 'ACTIONS_SERVER_SMOKE'; do
+for text in 'openssh-server' 'SSH_PASSWORD' 'tailscale ip -4' 'chpasswd' 'PasswordAuthentication yes' 'PermitRootLogin no' 'AllowUsers runner' 'ListenAddress $TAILSCALE_IP' 'sshd -D -e' 'ACTIONS_SERVER_SMOKE' 'systemctl stop ssh.service ssh.socket' 'pkill -x sshd'; do
   require_literal "$SERVER_SCRIPT" "$text"
 done
 for forbidden in Xvfb xfce4 noVNC novnc x11vnc websockify ttyd nginx cloudflared fluxbox; do
