@@ -16,17 +16,20 @@ jobs:
     timeout-minutes: 355
     env:
       SSH_PASSWORD: ${{ secrets.DESKTOP_PASSWORD }}
+      TAILSCALE_AUTHKEY: ${{ secrets.TAILSCALE_AUTHKEY }}
 
     steps:
       - name: Checkout
         uses: actions/checkout@v5
 
-      - name: Validate SSH password
+      - name: Validate SSH access secrets
         shell: bash
         run: |
           test -n "${SSH_PASSWORD:-}" || { echo '::error::DESKTOP_PASSWORD is required.'; exit 1; }
           (( ${#SSH_PASSWORD} >= 16 )) || { echo '::error::DESKTOP_PASSWORD must contain at least 16 characters.'; exit 1; }
+          test -n "${TAILSCALE_AUTHKEY:-}" || { echo '::error::TAILSCALE_AUTHKEY is required.'; exit 1; }
           echo "::add-mask::$SSH_PASSWORD"
+          echo "::add-mask::$TAILSCALE_AUTHKEY"
 
       - name: Reclaim runner disk space
         run: bash scripts/cleanup-runner.sh
