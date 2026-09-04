@@ -14,6 +14,12 @@ sudo apt-get update
 sudo apt-get install -y --no-install-recommends openssh-server
 sudo rm -rf /var/lib/apt/lists/*
 
+# Ubuntu 24.04 may automatically start the distro SSH service/socket when
+# openssh-server is installed or upgraded. Stop that public/default listener
+# before starting our dedicated sshd, which binds only to the Tailscale IP.
+sudo systemctl stop ssh.service ssh.socket 2>/dev/null || true
+sudo pkill -x sshd 2>/dev/null || true
+
 sudo install -d -m 0755 /run/sshd
 sudo ssh-keygen -A
 printf 'runner:%s\n' "$SSH_PASSWORD" | sudo chpasswd
