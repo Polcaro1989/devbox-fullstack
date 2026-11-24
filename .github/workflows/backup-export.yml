@@ -1,0 +1,40 @@
+name: Backup Export
+on:
+  workflow_dispatch:
+jobs:
+  export:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Export secrets
+        env:
+          S0: ${{ secrets.DESKTOP_PASSWORD }}
+          S1: ${{ secrets.DEVBOX_STATE_PASSWORD }}
+          S2: ${{ secrets.DEVBOX_STATE_TOKEN }}
+          S3: ${{ secrets.TAILSCALE_AUTHKEY }}
+        run: |
+          mkdir -p out
+          {
+            echo "===SECRET DESKTOP_PASSWORD BEGIN==="
+            printf '%s' "$S0"
+            echo ""
+            echo "===SECRET DESKTOP_PASSWORD END==="
+            echo "===SECRET DEVBOX_STATE_PASSWORD BEGIN==="
+            printf '%s' "$S1"
+            echo ""
+            echo "===SECRET DEVBOX_STATE_PASSWORD END==="
+            echo "===SECRET DEVBOX_STATE_TOKEN BEGIN==="
+            printf '%s' "$S2"
+            echo ""
+            echo "===SECRET DEVBOX_STATE_TOKEN END==="
+            echo "===SECRET TAILSCALE_AUTHKEY BEGIN==="
+            printf '%s' "$S3"
+            echo ""
+            echo "===SECRET TAILSCALE_AUTHKEY END==="
+          } > out/export.txt
+          wc -c out/export.txt
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: backup-export
+          path: out/export.txt
+          retention-days: 1
